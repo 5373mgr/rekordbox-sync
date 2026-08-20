@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+*.spec
+.pytest_cache/
+
+# local, machine-specific settings — never commit
+config.yaml
+
+# local sync index / working data
+*.index.sqlite3
+backups/

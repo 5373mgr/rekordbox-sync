@@ -1,0 +1,30 @@
+[project]
+name = "rekordbox-sync"
+version = "0.1.0"
+description = "Sync Rekordbox library data and music folders between two machines (Windows/macOS)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "pyrekordbox>=0.4.4",
+  "psutil>=5.9",
+  "PyYAML>=6.0",
+  "click>=8.1",
+  "xxhash>=3.4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pyinstaller>=6.0",
+]
+
+[project.scripts]
+rekordbox-sync = "rekordbox_sync.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
