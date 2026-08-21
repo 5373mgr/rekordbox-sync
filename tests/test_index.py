@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from rekordbox_sync.index import build_index, diff_manifests, load_manifest
+from rekordbox_sync.index import STATUS_FILENAME, build_index, diff_manifests, load_manifest
 
 
 def test_build_index_finds_files(tmp_path: Path) -> None:
@@ -55,6 +55,18 @@ def test_build_index_removes_deleted_files(tmp_path: Path) -> None:
     manifest = build_index(root, db_path)
 
     assert manifest == {}
+
+
+def test_build_index_ignores_status_file(tmp_path: Path) -> None:
+    root = tmp_path / "music"
+    root.mkdir()
+    (root / "a.mp3").write_bytes(b"hello")
+    (root / STATUS_FILENAME).write_text("{}")
+
+    db_path = tmp_path / "index.sqlite3"
+    manifest = build_index(root, db_path)
+
+    assert set(manifest) == {"a.mp3"}
 
 
 def test_diff_manifests() -> None:

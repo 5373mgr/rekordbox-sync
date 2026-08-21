@@ -10,12 +10,10 @@ local:
   rekordbox_data_dir: null
 
 remote:
-  # Address of the other machine, reachable over LAN or a VPN you manage
-  # (e.g. Tailscale). This tool does not set up the network path itself.
-  # Used only for the confirmation handshake (readiness + manifest exchange),
-  # never for the actual file transfer.
-  host: "100.x.x.x"
-  port: 51820
+  # No host/port here: this tool never opens a network listener. Status
+  # (readiness + manifest) is exchanged purely through the shared folders
+  # below, which must already be reachable over LAN or a VPN you manage
+  # (e.g. Tailscale) — this tool does not set up that network path itself.
 
   # Root folder containing the music library, as seen from the *other*
   # machine's own OS. Used to rewrite absolute track paths inside master.db

@@ -7,6 +7,10 @@ from pathlib import Path
 
 from .hashing import hash_file
 
+# Written by status_file.py directly into the music root; never treated as
+# a library file so it's not diffed/transferred like a track would be.
+STATUS_FILENAME = ".rekordbox-sync-status.json"
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
     relative_path TEXT PRIMARY KEY,
@@ -61,7 +65,7 @@ def build_index(root: Path, index_db_path: Path) -> dict[str, FileEntry]:
         seen: set[str] = set()
         now = time.time()
         for path in root.rglob("*"):
-            if not path.is_file():
+            if not path.is_file() or path.name == STATUS_FILENAME:
                 continue
             rel = path.relative_to(root).as_posix()
             seen.add(rel)

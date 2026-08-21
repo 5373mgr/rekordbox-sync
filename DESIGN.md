@@ -16,7 +16,8 @@
 
 ## 前提条件
 
-- 2PCは同期実行時に**ネットワーク的に相互到達可能**であること（同一LAN、またはユーザー自身が構築したVPN＝Tailscale/ZeroTire/WireGuard等、いずれでも可）。到達性の確立はツールの責務外とし、ツールは「設定されたホストに疎通できるか」のみを確認する
+- 2PCは同期実行時に、片方が設定した共有パス（`remote.music_share` / `remote.rekordbox_share`）経由で**もう片方のフォルダにファイルシステムとしてアクセスできる**こと（同一LAN上のSMB共有、またはユーザー自身が構築したVPN＝Tailscale等の上に構築した共有、いずれでも可）。ネットワーク到達性・共有の構築自体はツールの責務外とする
+- **ツールはネットワークポートを一切開かない**。状態確認（後述のPublish/Status）も実データ転送も、すべて上記の共有フォルダ経由で行う
 - 同期は**手動トリガー**（常駐デーモンではなく、ユーザーが同期したいタイミングで実行するCLI/GUI）
 - 双方向マージは行わない。同期実行のたびに **push（自分→相手）** か **pull（相手→自分）** を明示的に選ぶ片方向運用とする
 
@@ -26,15 +27,17 @@
 [PC A]                                          [PC B]
  ┌───────────────────────┐                ┌───────────────────────┐
  │ rekordbox-sync (Python)│                │ rekordbox-sync (Python)│
- │  - Local Index (SQLite)│◄──handshake───►│  - Local Index (SQLite)│
- │  - Rekordbox process   │   (確認のみ)    │  - Rekordbox process   │
+ │  - Local Index (SQLite)│                │  - Local Index (SQLite)│
+ │  - Rekordbox process   │                │  - Rekordbox process   │
  │    guard                │                │    guard                │
  │  - master.db path      │                │  - master.db path      │
  │    rewriter             │                │    rewriter             │
+ │  - status file          │                │  - status file          │
+ │    (自分の音楽フォルダに書く)│                │    (自分の音楽フォルダに書く)│
  └──────────┬──────────────┘                └──────────┬──────────────┘
             │                                            │
-            └──────────── 実データ転送 (SMB/直接コピー) ───┘
-                    ※ハンドシェイクとは別チャネル
+            └───── 共有フォルダ経由 (SMB等) ────────────────┘
+                 status読み取り・実データ転送とも同じ経路
 ```
 
 ### コンポーネント
@@ -44,11 +47,12 @@
    - スキーマ: `relative_path, size, mtime, hash, last_indexed_at`
    - ハッシュは非暗号高速ハッシュ（xxHash / BLAKE3系）を使用。サイズ・mtimeが前回と一致するファイルは再ハッシュしない（rsync/rclone同様の最適化）。ファイル数・総容量が大きいライブラリでも2回目以降のスキャンは高速
 
-2. **Handshake（確認専用の通信）**
-   - 同期実行時のみ、設定されたホスト:ポートに接続する軽量プロトコル（JSON over TCP想定）
-   - 交換する情報: 自分のマニフェスト要約、Rekordboxプロセスが停止しているか
-   - 直接到達できることが前提。到達不可の場合は同期不可（クラウド中継のフォールバックは採用しない）
-   - **このチャネルは確認・調停のみに使う。実データはここを通さない**
+2. **Status file（確認専用、ネットワークポート不使用）**
+   - 各PCは自分の楽曲フォルダ直下に `.rekordbox-sync-status.json`（Rekordbox起動状況・公開日時・自分のマニフェスト要約）を書き込む（`publish` コマンド、またはSync実行時に自動で最新化）
+   - 相手側はこのファイルを、共有フォルダ越しに**読むだけ**で確認する。TCP接続やポート開放は一切不要
+   - 公開から一定時間（既定10分）経過している場合は「古い可能性がある」警告をログに出す（相手が`publish`し忘れている可能性の検知）
+   - このファイル自体はLocal Indexの対象から除外され、楽曲ファイルとして差分転送されることはない
+   - **音楽フォルダへの読み書きアクセスさえあれば成立する。実データ転送と全く同じ経路を使う**
 
 3. **Transfer Executor（実データ転送）**
    - 到達可能な場合: SMB共有 or 直接ファイルコピー（差分のみ、Local Indexの比較結果に基づく）
@@ -85,10 +89,16 @@ local:
   rekordbox_data_dir: null           # 未指定時はOS既定値を使用
 
 remote:
-  host: "100.x.x.x"                  # Tailscale等で到達可能なホスト
-  port: 51820
-  music_root: "/Users/foo/Music/DJ"  # 相手PC側のルートパス（パス書き換えに使用）
+  music_root: "/Users/foo/Music/DJ"        # 相手PC側のルートパス（パス書き換えに使用）
+  music_share: "//100.x.x.x/DJ Itunes"     # 自分から見た相手の楽曲フォルダ共有パス
+  rekordbox_share: "//100.x.x.x/rekordbox-data"  # 同、Rekordboxデータフォルダ
 ```
+
+ホスト名・ポートの指定は存在しない（ネットワークポートを使わないため）。GUIでは
+`local_music_root` / `local_rekordbox_data_dir` / `remote_music_share` /
+`remote_rekordbox_share` の4項目はExplorerのフォルダ選択ダイアログで指定できる
+（`remote_music_root` のみ相手PC自身のOS上のパス文字列であり、このPCからは参照
+できないためテキスト入力のまま）。
 
 認証情報やホスト固有情報はリポジトリにコミットしない。`config.example.yaml` をテンプレートとして同梱する。
 
@@ -100,23 +110,31 @@ rekordbox-sync/
 ├── pyproject.toml
 ├── config.example.yaml
 ├── .gitignore
+├── run.py                     # PyInstaller用 CLI エントリポイント
+├── run_gui.py                 # PyInstaller用 GUI エントリポイント
 ├── src/
 │   └── rekordbox_sync/
 │       ├── __init__.py
-│       ├── cli.py                # エントリポイント
+│       ├── orchestrator.py       # 同期処理の本体（CLI/GUI 共通）
+│       ├── cli.py                # CLIエントリポイント（orchestratorの薄いラッパー）
+│       ├── gui.py                # Tkinter製の簡易GUI（同じくorchestratorを呼ぶ）
 │       ├── config.py             # config.yaml ロード
 │       ├── index.py              # Local Index (SQLite) 管理
 │       ├── hashing.py            # 差分検出用ハッシュ計算
 │       ├── process_guard.py      # Rekordbox起動チェック (psutil)
-│       ├── handshake.py          # 確認用ソケット通信
+│       ├── status_file.py        # 確認用ステータスファイル (ネットワーク不使用)
 │       ├── transfer.py           # 差分転送実行
 │       ├── rekordbox_db.py       # master.db 読み書き・パス書き換え (pyrekordbox)
 │       └── relocate.py           # 初回の音楽フォルダ再配置処理
 ├── tests/
 └── .github/
     └── workflows/
-        └── build-installers.yml  # Windows/macOS インストーラビルド
+        └── build-installers.yml  # Windows/macOS インストーラビルド (CLI+GUI)
 ```
+
+GUIは「設定編集」と「Publish/Sync実行ボタン」のみに絞った簡易UIとし、詳細な進捗ログは
+テキストエリアに流す。索引作成・Rekordbox起動チェック・バックアップ等はSync実行時に
+`orchestrator.py`側で自動的に行われ、GUI/CLIどちらから使っても同じ動作になる。
 
 ## CI/CD（GitHub Actions）
 
@@ -130,9 +148,9 @@ rekordbox-sync/
 
 - `pyrekordbox`はRekordboxの非公開DB形式に依存するリバースエンジニアリング実装のため、Rekordboxアップデートで暗号化方式が変わると追従が必要になる可能性がある
 - 双方向マージ非対応のため、同期方向を誤ると片方の変更が失われる（バックアップ退避で復旧は可能）
-- ネットワーク到達性の確立（VPN等）はユーザー側の前提条件であり、ツールはそれを構築しない
+- ネットワーク到達性・共有フォルダの構築（VPN、SMB共有等）はユーザー側の前提条件であり、ツールはそれを構築しない
+- status fileはPublish時点のスナップショットであり、相手が`publish`し忘れていると古い情報のまま同期してしまう可能性がある（一定時間経過で警告は出すが、強制はしない）
 
 ## 未確定事項
 
-- Handshakeプロトコルの詳細（メッセージフォーマット、ポート、認証の要否）
 - インストーラの署名（特にmacOSのnotarization）の要否

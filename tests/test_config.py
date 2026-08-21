@@ -16,8 +16,6 @@ local:
   rekordbox_data_dir: {rekordbox_data_dir_yaml}
 
 remote:
-  host: "100.1.2.3"
-  port: 51820
   music_root: "/Users/foo/Music/DJ"
   music_share: '{(path.parent / "share_music").as_posix()}'
   rekordbox_share: '{(path.parent / "share_rekordbox").as_posix()}'
@@ -35,8 +33,7 @@ def test_load_config_with_explicit_rekordbox_dir(tmp_path: Path) -> None:
 
     assert cfg.local.music_root == tmp_path / "music"
     assert cfg.local.rekordbox_data_dir == rb_dir
-    assert cfg.remote.host == "100.1.2.3"
-    assert cfg.remote.port == 51820
+    assert cfg.remote.music_root == "/Users/foo/Music/DJ"
     assert cfg.rekordbox_db_path == cfg.local.rekordbox_data_dir / "master.db"
 
 

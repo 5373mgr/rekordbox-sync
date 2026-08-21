@@ -27,8 +27,6 @@ class LocalConfig:
 
 @dataclass
 class RemoteConfig:
-    host: str
-    port: int
     music_root: str  # kept as string: it's a path on the *other* machine's OS
     music_share: Path  # how this machine reaches the peer's music folder
     rekordbox_share: Path  # how this machine reaches the peer's rekordbox data folder
@@ -63,8 +61,6 @@ def load_config(path: Path) -> Config:
 
     remote_raw = raw["remote"]
     remote = RemoteConfig(
-        host=remote_raw["host"],
-        port=int(remote_raw["port"]),
         music_root=remote_raw["music_root"],
         music_share=Path(remote_raw["music_share"]),
         rekordbox_share=Path(remote_raw["rekordbox_share"]),

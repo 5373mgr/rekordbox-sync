@@ -15,10 +15,12 @@ jobs:
         include:
           - os: windows-latest
             asset_name: rekordbox-sync-windows
-            binary_name: rekordbox-sync.exe
+            cli_binary: rekordbox-sync.exe
+            gui_binary: rekordbox-sync-gui.exe
           - os: macos-latest
             asset_name: rekordbox-sync-macos
-            binary_name: rekordbox-sync
+            cli_binary: rekordbox-sync
+            gui_binary: rekordbox-sync-gui
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -33,14 +35,18 @@ jobs:
       - name: Run tests
         run: pytest -q
 
-      - name: Build executable
+      - name: Build CLI executable
         run: pyinstaller --onefile --name rekordbox-sync run.py
+
+      - name: Build GUI executable
+        run: pyinstaller --onefile --windowed --name rekordbox-sync-gui run_gui.py
 
       - name: Package artifact
         shell: bash
         run: |
           mkdir -p dist_package
-          cp "dist/${{ matrix.binary_name }}" dist_package/
+          cp "dist/${{ matrix.cli_binary }}" dist_package/
+          cp "dist/${{ matrix.gui_binary }}" dist_package/
           cp config.example.yaml dist_package/
           cp README.md dist_package/
           python -c "import shutil; shutil.make_archive('${{ matrix.asset_name }}', 'zip', 'dist_package')"

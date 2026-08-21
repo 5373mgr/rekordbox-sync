@@ -22,6 +22,9 @@ dev = [
 [project.scripts]
 rekordbox-sync = "rekordbox_sync.cli:main"
 
+[project.gui-scripts]
+rekordbox-sync-gui = "rekordbox_sync.gui:main"
+
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
