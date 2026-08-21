@@ -4,10 +4,14 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
+from pyrekordbox import Rekordbox6Database
+
 from . import config as config_mod
 from . import index as index_mod
+from . import merge as merge_mod
 from . import process_guard
 from . import rekordbox_db as rekordbox_db_mod
+from . import rekordbox_merge as rekordbox_merge_mod
 from . import status_file as status_file_mod
 from . import transfer as transfer_mod
 
@@ -154,3 +158,71 @@ def run_sync(
         )
         reindex(cfg, config_path)
         log("Pull complete.")
+
+
+def run_merge(cfg: config_mod.Config, config_path: Path, dry_run: bool, log: Logger) -> None:
+    """Two-way merge: union new files/tracks/playlist entries onto both
+    sides, resolving same-path/same-track conflicts by last-write-wins.
+    Never deletes anything on either side. The peer must have run
+    `publish_status` first. This mutates *both* databases, so both are
+    backed up before anything is written.
+    """
+    process_guard.ensure_rekordbox_stopped()
+
+    local_manifest = reindex(cfg, config_path)
+    status_file_mod.write_status(cfg.local.music_root, False, local_manifest)
+    peer_status = _read_peer_status(cfg, log)
+
+    if peer_status.rekordbox_running:
+        raise RuntimeError("Peer reports Rekordbox is still running there. Aborting.")
+
+    plan = merge_mod.plan_file_merge(local_manifest, peer_status.manifest)
+    log(
+        f"merge: {len(plan.to_local)} to bring here, {len(plan.to_peer)} to send to peer "
+        f"({len(plan.conflicts)} same-path conflicts resolved by newer mtime)"
+    )
+    if dry_run:
+        return
+
+    merge_mod.apply_file_merge(plan, cfg.local.music_root, cfg.remote.music_share)
+    reindex(cfg, config_path)
+
+    peer_db_path = cfg.remote.rekordbox_share / "master.db"
+    local_backup = rekordbox_db_mod.backup_master_db(cfg.rekordbox_db_path)
+    if local_backup:
+        log(f"Backed up local master.db to {local_backup}")
+    peer_backup = rekordbox_db_mod.backup_master_db(peer_db_path)
+    if peer_backup:
+        log(f"Backed up peer's master.db to {peer_backup}")
+
+    local_db = Rekordbox6Database(path=str(cfg.rekordbox_db_path))
+    peer_db = Rekordbox6Database(path=str(peer_db_path))
+    try:
+        track_stats = rekordbox_merge_mod.merge_tracks(
+            local_db,
+            peer_db,
+            str(cfg.local.music_root),
+            cfg.remote.music_root,
+            cfg.local.music_root,
+            cfg.remote.music_share,
+            log,
+        )
+        log(
+            f"tracks: +{track_stats.added_to_local} here, +{track_stats.added_to_peer} peer, "
+            f"~{track_stats.updated_local} here, ~{track_stats.updated_peer} peer"
+        )
+
+        playlist_stats = rekordbox_merge_mod.merge_playlists(
+            local_db, peer_db, str(cfg.local.music_root), cfg.remote.music_root, log
+        )
+        log(
+            f"playlists: +{playlist_stats.created_local} created here, "
+            f"+{playlist_stats.created_peer} created on peer, "
+            f"{playlist_stats.added_local} tracks added here, "
+            f"{playlist_stats.added_peer} tracks added to peer"
+        )
+    finally:
+        local_db.close()
+        peer_db.close()
+
+    log("Merge complete.")

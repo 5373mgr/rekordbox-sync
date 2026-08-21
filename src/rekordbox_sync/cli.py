@@ -97,5 +97,22 @@ def sync(ctx: click.Context, direction: str, dry_run: bool) -> None:
         sys.exit(1)
 
 
+@main.command()
+@click.option("--dry-run", is_flag=True, default=False)
+@click.pass_context
+def merge(ctx: click.Context, dry_run: bool) -> None:
+    """Two-way merge with the peer: union new files/tracks/playlists onto
+    both sides, resolving same-path conflicts by last-write-wins. Never
+    deletes anything on either side. Mutates both machines' master.db (both
+    are backed up first). Run `publish` on the other machine first.
+    """
+    cfg = config_mod.load_config(ctx.obj["config_path"])
+    try:
+        orchestrator.run_merge(cfg, ctx.obj["config_path"], dry_run, click.echo)
+    except RuntimeError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

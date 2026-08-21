@@ -108,6 +108,9 @@ class App(tk.Tk):
         ttk.Radiobutton(
             sync_row, text="Pull (相手→自分)", variable=self.direction, value="pull"
         ).pack(side="left")
+        ttk.Radiobutton(
+            sync_row, text="Merge (両方合流)", variable=self.direction, value="merge"
+        ).pack(side="left")
         self.dry_run = tk.BooleanVar(value=False)
         ttk.Checkbutton(sync_row, text="Dry run", variable=self.dry_run).pack(
             side="left", padx=8
@@ -214,9 +217,13 @@ class App(tk.Tk):
             cfg = self._load_config()
             if not cfg:
                 return
-            orchestrator.run_sync(
-                cfg, self.config_path, self.direction.get(), self.dry_run.get(), self._log
-            )
+            direction = self.direction.get()
+            if direction == "merge":
+                orchestrator.run_merge(cfg, self.config_path, self.dry_run.get(), self._log)
+            else:
+                orchestrator.run_sync(
+                    cfg, self.config_path, direction, self.dry_run.get(), self._log
+                )
 
         self._run_in_background(task)
 

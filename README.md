@@ -38,8 +38,8 @@ rekordbox-sync-gui
 - **Publish（状態を公開）**: 相手からのsyncを受け付ける側で先に押しておく
   （Rekordbox起動状況とライブラリの索引を、自分の楽曲フォルダ内に書き出すだけ。
   待ち受けやポート開放は不要）
-- **Sync 実行**: Push（自分→相手）/ Pull（相手→自分）を選び、必要なら Dry run を
-  チェックして実行する
+- **Sync 実行**: Push（自分→相手、上書き）/ Pull（相手→自分、上書き）/
+  Merge（両側を合流、削除は伝播しない）を選び、必要なら Dry run をチェックして実行する
 
 Rekordboxの起動チェック・ライブラリの索引作成・`master.db`のバックアップと
 パス書き換えは、いずれもSync実行時に内部で自動的に行われる。
@@ -56,16 +56,26 @@ rekordbox-sync relocate
 # 受け側で状態を公開(ポート開放不要、共有経由で読まれるだけ)
 rekordbox-sync publish
 
-# 送り側で同期を実行
+# 送り側で同期を実行(片方向・上書き)
 rekordbox-sync sync --direction push   # 自分 -> 相手
 rekordbox-sync sync --direction pull   # 相手 -> 自分
 
+# 両側を合流させる(新規は両方に反映、削除は伝播しない)
+rekordbox-sync merge
+
 # 内容を確認するだけ(実際には転送しない)
 rekordbox-sync sync --direction push --dry-run
+rekordbox-sync merge --dry-run
 ```
 
-`sync` は片方向のみで、双方向マージは行わない。同期方向を誤ると片方の変更が失われる点に
-注意（`master.db`は上書き前に自動でタイムスタンプ付きバックアップが作られる）。
+`sync`（push/pull）は片方向の上書きで、方向を誤ると片方の変更が失われる点に注意
+（`master.db`は上書き前に自動でタイムスタンプ付きバックアップが作られる）。
+
+`merge` は自宅PCで楽曲整理をしつつ、出先のノートPCで購入・インポートした曲や
+作成したプレイリストがある、といったケース向け。新規ファイル・新規トラック・
+プレイリストのメンバーシップは両側に合流し、同じファイルが両側で食い違っていれば
+新しい方（mtime基準）を採用する。**削除は一切伝播しない**（安全側の設計）。
+`push`/`pull`と異なり両方の`master.db`を書き換えるため、両方とも事前にバックアップされる。
 
 ## 開発
 
