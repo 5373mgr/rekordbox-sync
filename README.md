@@ -18,11 +18,21 @@ Publish/Sync実行ボタンのみの簡易UI）とCLIの両方を用意してお
 
 ## インストール
 
+[Releases](../../releases) からOS向けのインストーラーを取得するのが手軽。
+
+- **Windows**: `rekordbox-sync-setup.exe` を実行（CLI/GUI両方を `Program Files\rekordbox-sync`
+  にインストールし、Start Menuにショートカットを作成。「PATHに追加」タスクを
+  チェックすればターミナルから `rekordbox-sync` を直接呼べるようになる）
+- **macOS**: `rekordbox-sync.pkg` を実行（GUIを `/Applications` に、CLIを
+  `/usr/local/bin/rekordbox-sync` にインストール）。署名していないため、初回起動時に
+  Gatekeeperにブロックされる場合はFinderで対象を右クリック→「開く」を選ぶか、
+  `xattr -d com.apple.quarantine /Applications/rekordbox-sync-gui.app` を実行する
+
+ソースから使う場合:
+
 ```bash
 pip install -e ".[dev]"
 ```
-
-または [Releases](../../releases) から各OS向けのビルド済み実行ファイルを利用。
 
 ## 使い方（GUI）
 

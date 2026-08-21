@@ -137,6 +137,9 @@ rekordbox-sync/
 │       ├── rekordbox_db.py       # master.db 読み書き・パス書き換え (pyrekordbox)
 │       ├── rekordbox_merge.py    # トラック/プレイリストの2-way merge (pyrekordbox)
 │       └── relocate.py           # 初回の音楽フォルダ再配置処理
+├── installer/
+│   ├── windows/setup.iss         # Inno Setup スクリプト
+│   └── macos/build_pkg.sh        # pkgbuildで.pkgを生成するスクリプト
 ├── tests/
 └── .github/
     └── workflows/
@@ -149,11 +152,22 @@ GUIは「設定編集」と「Publish/Sync実行ボタン」のみに絞った�
 
 ## CI/CD（GitHub Actions）
 
-- `windows-latest` / `macos-latest` のマトリクスビルド
-- PyInstaller でOSごとの単体実行ファイルを生成
-  - Windows: `.exe`（必要なら Inno Setup 等でインストーラ化）
-  - macOS: `.app`（`.dmg`にまとめる）
-- タグpush（`v*`）をトリガーに、GitHub Releasesへ成果物を添付
+`.github/workflows/build-installers.yml` は `build-windows` / `build-macos` / `release` の
+3ジョブ構成。いずれもCLI・GUI双方をPyInstallerで単体実行ファイル化した上で、
+OSごとの正式なインストーラーに包む。
+
+- **Windows**（`build-windows`）: `installer/windows/setup.iss`（Inno Setup）を
+  [Minionguyjpro/Inno-Setup-Action](https://github.com/Minionguyjpro/Inno-Setup-Action)
+  でコンパイルし、`rekordbox-sync-setup.exe` を生成。Program Filesへのインストール、
+  Start Menuショートカット、PATH追加（任意タスク）を行う。ローカルでも
+  `installer/windows/setup.iss` をInno Setup（`ISCC.exe /DMyAppVersion=x.y.z setup.iss`）
+  で直接コンパイル・動作確認済み
+- **macOS**（`build-macos`）: `installer/macos/build_pkg.sh` が `pkgbuild` で
+  `rekordbox-sync.pkg` を生成。GUIを `.app` として `/Applications` に、CLIを
+  `/usr/local/bin/rekordbox-sync` にインストールする。署名・notarizationは未対応
+  （未確定事項を参照）。macOS実機での動作確認はできていないため、CI上のビルド結果で
+  検証している
+- タグpush（`v*`）をトリガーに`release`ジョブが起動し、両OSの成果物をGitHub Releasesへ添付
 
 ## 既知のリスク・制約
 

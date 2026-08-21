@@ -8,20 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            asset_name: rekordbox-sync-windows
-            cli_binary: rekordbox-sync.exe
-            gui_binary: rekordbox-sync-gui.exe
-          - os: macos-latest
-            asset_name: rekordbox-sync-macos
-            cli_binary: rekordbox-sync
-            gui_binary: rekordbox-sync-gui
-    runs-on: ${{ matrix.os }}
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -41,24 +29,68 @@ jobs:
       - name: Build GUI executable
         run: pyinstaller --onefile --windowed --name rekordbox-sync-gui run_gui.py
 
-      - name: Package artifact
+      - name: Determine version
+        id: version
         shell: bash
         run: |
-          mkdir -p dist_package
-          cp "dist/${{ matrix.cli_binary }}" dist_package/
-          cp "dist/${{ matrix.gui_binary }}" dist_package/
-          cp config.example.yaml dist_package/
-          cp README.md dist_package/
-          python -c "import shutil; shutil.make_archive('${{ matrix.asset_name }}', 'zip', 'dist_package')"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build installer (Inno Setup)
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: installer/windows/setup.iss
+          options: /DMyAppVersion=${{ steps.version.outputs.value }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}.zip
+          name: rekordbox-sync-windows-setup
+          path: dist_installer/rekordbox-sync-setup.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Build CLI executable
+        run: pyinstaller --onefile --name rekordbox-sync run.py
+
+      - name: Build GUI executable (.app bundle)
+        run: pyinstaller --onefile --windowed --name rekordbox-sync-gui run_gui.py
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build .pkg installer
+        run: installer/macos/build_pkg.sh ${{ steps.version.outputs.value }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rekordbox-sync-macos-pkg
+          path: dist_installer/rekordbox-sync.pkg
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -70,4 +102,6 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.zip
+          files: |
+            artifacts/rekordbox-sync-windows-setup/rekordbox-sync-setup.exe
+            artifacts/rekordbox-sync-macos-pkg/rekordbox-sync.pkg

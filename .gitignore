@@ -5,6 +5,8 @@ venv/
 *.egg-info/
 build/
 dist/
+dist_installer/
+pkgroot/
 *.spec
 .pytest_cache/
 
